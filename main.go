@@ -30,8 +30,8 @@ func main() {
 		target  = flag.String("u", "", "The URL to connect to")
 		origin  = flag.String("o", "", "The origin to use in the WS request")
 		h       headers
-		origURL *url.URL
 	)
+		var origURL *url.URL
 	flag.Var(&h, "H", `Headers to use in the WS request, can be used to multiple times to specify multiple headers.`+
 		` Example: -H "Sample-Header-1: foo" -H "Sample-Header-2: bar"`)
 	flag.Parse()
@@ -48,8 +48,26 @@ func main() {
 			fmt.Fprintf(os.Stderr, "failed to parse origin URL: %s", err.Error())
 			os.Exit(1)
 		}
+	} else {
+		dest, err := url.Parse(*target)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		origURL = dest
+		if dest.Scheme == "wss" {
+			origURL.Scheme = "https"
+		} else {
+			origURL.Scheme = "http"
+		}
+		*origin = origURL.String()
+		log.Println("Using %v as origin", *origin)
 	}
-	ws := connect(*target, makeHeader(h), origURL)
+	head := makeHeader(h)
+	head.Add("WebSocket-Origin", *origin)
+	//head.Add("Origin", *origin)
+	log.Printf("%+v", head)
+	ws := connect(*target, head, origURL)
 	trapCtrlC(ws)
 	go write(ws)
 	read(ws)
@@ -76,7 +94,7 @@ func connect(addr string, h http.Header, origin *url.URL) *websocket.Conn {
 	if err != nil {
 		log.Fatal(err)
 	}
-	log.Print("ready, exit with CTRL+C.")
+	//log.Print("ready, exit with CTRL+C.")
 	return ws
 }
 
@@ -99,7 +117,7 @@ func write(ws *websocket.Conn) {
 	for scanner.Scan() {
 		t := scanner.Text()
 		ws.Write([]byte(t))
-		fmt.Printf(">> %s\n", t)
+		//fmt.Printf(">> %s\n", t)
 	}
 }
 
@@ -111,6 +129,6 @@ func read(ws *websocket.Conn) {
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Printf("<< %s\n", msg[:n])
+		fmt.Printf("%s\n", msg[:n])
 	}
 }
